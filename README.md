@@ -5,15 +5,16 @@ PyOpenSim is an experimental Python client skeleton for connecting to
 provide a starting point for programmatic interactions with SecondLife/OpenSim
 worlds from Python.
 
-**Current Status**: This repository contains only minimal scaffolding and does
-not implement the full SecondLife protocol or 3D rendering. It simply outlines a
-possible architecture for such a client. Contributions are welcome!
+**Current Status**: PyOpenSim is still highly experimental. It implements a
+very small subset of the SecondLife/OpenSim protocols but demonstrates how a
+client might log in, poll the event queue and display placeholder objects using
+`pyglet`.
 
 ## Features
 
-- Connect to a grid using a placeholder login request.
-- Minimal 3D rendering window using `pyglet` (no real asset support yet).
-- Example stubs for avatar actions.
+- Connect to a grid and start polling the event queue.
+- Minimal 3D rendering window using `pyglet` that draws cubes for objects.
+- Simple avatar actions using capabilities.
 - Packet type enumeration generated from LibreMetaverse.
 
 ## Usage
@@ -39,7 +40,7 @@ client = OpenSimClient(
 
 if client.login():
     print("Logged in!")
-    renderer = Renderer()
+    renderer = Renderer(client.scene)
     renderer.start()
 ```
 
