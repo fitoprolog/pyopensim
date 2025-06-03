@@ -2,3 +2,4 @@
 
 from .client import OpenSimClient
 from .render import Renderer
+from .scene import Scene
