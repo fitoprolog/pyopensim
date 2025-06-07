@@ -38,4 +38,10 @@ __all__ = [
     "TerrainManager",
     "SoundManager",
     "AgentThrottle",
+    "AgentCamera",
+    "AgentMovementManager",
+    "AppearanceManager",
+    "ObjectManager",
+    "InventoryManager",
+    "AssetManager", # Added
 ]

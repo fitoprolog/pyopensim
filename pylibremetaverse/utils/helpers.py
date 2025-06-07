@@ -184,6 +184,33 @@ def uint16_to_float_packed(uint16_val: int, lower: float, upper: float) -> float
     normalized_val = float(uint16_val) / 65535.0
     return lower + normalized_val * (upper - lower)
 
+def scale_float_to_sbyte(value: float, min_val: float, max_val: float) -> int:
+    """
+    Scales a float to an sbyte (-128 to 127).
+    The input float is first clamped to [min_val, max_val],
+    then normalized to the range [-1.0, 1.0],
+    and finally scaled to [-128, 127].
+    """
+    if min_val >= max_val:
+        # Or handle as error, depending on desired behavior for invalid range
+        if value <= min_val: return -128
+        if value >= max_val: return 127
+        return 0 # Midpoint for invalid range if value is also invalid
+
+    clamped_val = max(min_val, min(value, max_val))
+
+    # Normalize to 0-1 first relative to the span
+    normalized_zero_to_one = (clamped_val - min_val) / (max_val - min_val)
+
+    # Scale to -1 to 1
+    normalized_neg_one_to_one = (normalized_zero_to_one * 2.0) - 1.0
+
+    # Scale to sbyte range
+    # Using 127.0 as multiplier to ensure it maps correctly; result is rounded and clamped.
+    scaled = round(normalized_neg_one_to_one * 127.0)
+
+    return int(max(-128, min(127, scaled)))
+
 
 # --- Time Conversion ---
 
@@ -263,3 +290,176 @@ def lerp(start, end, amount):
 def approximately_equal(a: float, b: float, tolerance: float = 1e-6) -> bool:
     """Checks if two floats are approximately equal within a tolerance."""
     return abs(a - b) < tolerance
+
+
+# --- Zero Coding (Placeholders) ---
+
+def zero_encode(data: bytes) -> bytes:
+    """
+    Performs zero-coding compression on a byte array.
+    Placeholder: Returns original data. Actual implementation is complex.
+    See LibreMetaverse.Utils.ZeroEncode for reference.
+    """
+    # TODO: Implement actual zero-coding
+    return data
+
+def zero_decode(data: bytes, data_length: int, decompressed_buffer: bytearray) -> int:
+    """
+    Performs zero-coding decompression on a byte array.
+    Placeholder: Copies original data. Actual implementation is complex.
+    Args:
+        data: The zero-coded byte array.
+        data_length: The length of the data to decode from the source 'data' buffer.
+        decompressed_buffer: A pre-allocated bytearray to store the decompressed data.
+                             This buffer should be large enough (e.g., MAX_PACKET_SIZE).
+    Returns:
+        The actual length of the decompressed data.
+    See LibreMetaverse.Utils.ZeroDecode for reference.
+    """
+    # TODO: Implement actual zero-decoding
+    # Basic placeholder: copy data if it fits, assuming no actual compression/expansion.
+    # This is NOT a correct zero-decode implementation.
+    if data_length > len(decompressed_buffer): # Ensure we don't write past the end of source 'data' either
+        # This check is more about the source 'data' vs 'data_length'
+        raise ValueError("data_length exceeds source data buffer size, or decompressed_buffer is too small.")
+
+    if data_length > 0 : # Ensure there is data to copy
+        decompressed_buffer[:data_length] = data[:data_length]
+    return data_length
+
+
+def zero_encode(src: bytes, dest: bytearray) -> int:
+    """
+    Performs zero-coding compression on a byte array.
+    This is a port of the C# Helpers.ZeroEncode method.
+    Operates on the FULL packet data (header + body).
+
+    Args:
+        src: The source byte array (full packet data).
+        dest: A pre-allocated bytearray to store the compressed data.
+              Should be at least len(src) + some overhead, or MAX_PACKET_SIZE.
+
+    Returns:
+        The actual length written to dest_bytearray.
+    """
+    srclen = len(src)
+    if srclen == 0:
+        return 0
+
+    # The MSG_APPENDED_ACKS flag (0x10) is PacketFlags.ACK
+    # It indicates that the last byte of the packet payload (before this encoding)
+    # specifies the number of ACKs appended to this packet.
+    # Each ACK is 4 bytes (a u32 sequence number).
+    # This bodylen calculation is specific to how packet ACKs are appended
+    # *before* zero-coding is applied to the entire packet.
+    bodylen = srclen
+    if (src[0] & 0x10): # PacketFlags.ACK / MSG_APPENDED_ACKS
+        # Number of appended ACKs is in the last byte of the unencoded message
+        num_acks = src[srclen - 1]
+        if num_acks > 0:
+             bodylen = srclen - (num_acks * 4) - 1
+             # num_acks * 4 for the ACK data, -1 for the byte storing num_acks itself.
+
+    destoff = 0 # Current offset in destination buffer
+
+    # The first 6 bytes of a message are never zero-coded
+    # This typically includes the 4-byte header and first 2 bytes of payload.
+    # If srclen is less than 6, then the whole message is copied.
+    if srclen <= 6:
+        if srclen > len(dest): return 0 # Not enough space in dest
+        dest[:srclen] = src[:srclen]
+        return srclen
+
+    if len(dest) < 6: return 0 # Not enough space for even the initial copy
+    dest[:6] = src[:6]
+    destoff = 6
+
+    # Zero-code the rest of the message
+    srciter = 6 # Start iterating from the 7th byte of source
+
+    while srciter < srclen:
+        if destoff >= len(dest): return 0 # Ran out of space in dest
+
+        if src[srciter] == 0x00:
+            # Count zeroes
+            zeros = 0
+            while srciter < srclen and src[srciter] == 0x00 and zeros < 255:
+                zeros += 1
+                srciter += 1
+
+            if destoff + 2 > len(dest): return 0 # Not enough space for 0x00 and zero count
+            dest[destoff] = 0x00
+            dest[destoff+1] = zeros & 0xFF # Store count as byte
+            destoff += 2
+        else:
+            # Copy non-zero byte
+            dest[destoff] = src[srciter]
+            destoff += 1
+            srciter += 1
+
+            # Check if this is the start of the appended ACKs block
+            # If MSG_APPENDED_ACKS is set and we've reached the bodylen,
+            # the rest of the message is copied verbatim (these are the ACKs)
+            if srciter == bodylen and (src[0] & 0x10): # MSG_APPENDED_ACKS
+                remaining = srclen - srciter
+                if destoff + remaining > len(dest): return 0 # Not enough space
+                dest[destoff : destoff + remaining] = src[srciter : srclen]
+                destoff += remaining
+                srciter += remaining # Should break the loop
+                break
+
+    return destoff
+
+
+def zero_decode(src: bytes, dest: bytearray) -> int:
+    """
+    Performs zero-coding decompression on a byte array.
+    This is a port of the C# Helpers.ZeroDecode method.
+    Operates on the FULL packet data.
+
+    Args:
+        src: The zero-coded source byte array (full packet data).
+        dest: A pre-allocated bytearray to store the decompressed data.
+              Should be large enough (e.g., MAX_PACKET_SIZE).
+
+    Returns:
+        The actual length of the decompressed data.
+    """
+    srclen = len(src)
+    destoff = 0 # Current offset in destination buffer
+    srciter = 0 # Current offset in source buffer
+
+    # The first 6 bytes of a message are never zero-coded
+    if srclen <= 6:
+        if srclen > len(dest): return 0
+        dest[:srclen] = src[:srclen]
+        return srclen
+
+    if len(dest) < 6: return 0
+    dest[:6] = src[:6]
+    destoff = 6
+    srciter = 6
+
+    while srciter < srclen:
+        if destoff >= len(dest): return 0 # Ran out of space in dest
+
+        if src[srciter] == 0x00:
+            srciter += 1
+            if srciter >= srclen: # Should not happen with valid encoding
+                # This means a 0x00 was the last byte, which is an invalid sequence.
+                # Or, source was truncated.
+                return 0 # Error condition
+
+            zeros = src[srciter] & 0xFF
+            if destoff + zeros > len(dest): return 0 # Not enough space for all zeroes
+
+            for _ in range(zeros):
+                dest[destoff] = 0x00
+                destoff += 1
+        else:
+            dest[destoff] = src[srciter]
+            destoff += 1
+
+        srciter += 1
+
+    return destoff
