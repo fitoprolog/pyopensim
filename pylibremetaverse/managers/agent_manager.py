@@ -118,6 +118,13 @@ class AgentManager:
         self.agent_id=d.agent_id;self.session_id=d.session_id;self.secure_session_id=d.secure_session_id;self.circuit_code=d.circuit_code;self.seed_capability=d.seed_capability;self.name=f"{d.first_name} {d.last_name}";self.start_location_request=d.start_location or "last";self.home_info=d.home;il=d.look_at if d.look_at.magnitude_squared()>1e-5 else Vector3(1,0,0);self.movement.camera.look_at(self.current_position+il,self.current_position)
         self.client.inventory.inventory_root_uuid=d.inventory_root;self.client.inventory.library_root_uuid=d.library_root;self.client.inventory.library_owner_id=d.library_owner_id
         if d.inventory_skeleton:self.client.inventory._parse_initial_skeleton(d.inventory_skeleton,d.library_skeleton,d.library_owner_id)
+
+        # Handle buddy list for FriendsManager
+        if hasattr(self.client, 'friends') and self.client.friends is not None:
+            self.client.friends._handle_login_buddylist(d.buddy_list)
+        else:
+            logger.warning("FriendsManager not available on client to handle buddy list.")
+
         logger.info(f"AgentManager init for {self.name} ({self.agent_id}). Home:{self.home_info}. InvRoot:{self.client.inventory.inventory_root_uuid}")
     def _handle_sim_connected(self,s:Simulator):
         logger.info(f"Agent: Sim {s.name} connected.");asyncio.create_task(self.movement.start_periodic_updates()) if self.client.settings.send_agent_updates_regularly and self.client.settings.send_agent_updates else self.client.settings.send_agent_updates and asyncio.create_task(self.movement.send_update(True))

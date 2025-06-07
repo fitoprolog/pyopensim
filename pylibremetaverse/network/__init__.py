@@ -45,7 +45,16 @@ from .packets_object import (
 from .packets_asset import (
     RequestXferPacket, SendXferPacket, ConfirmXferPacket,
     TransferInfoPacket, TransferPacket,
-    RequestImagePacket, ImageDataPacket, ImageNotInDatabasePacket # Added Image packets
+    RequestImagePacket, ImageDataPacket, ImageNotInDatabasePacket,
+    AssetUploadRequestPacket, AssetUploadCompletePacket
+)
+from .packets_inventory import (
+    UpdateCreateInventoryItemPacket, UpdateInventoryItemPacket # Added server-side packet
+)
+from .packets_friends import (
+    OfferFriendshipPacket, AcceptFriendshipPacket, DeclineFriendshipPacket,
+    OnlineNotificationPacket, OfflineNotificationPacket, FindAgentPacket, AgentOnlineStatusPacket,
+    ChangeUserRightsPacket, TerminateFriendshipPacket # Added new packets
 )
 
 __all__ = [
@@ -73,5 +82,10 @@ __all__ = [
     "ObjectNamePacket", "ObjectDescriptionPacket", "ObjectTextPacket", "ObjectClickActionPacket",
     "ObjectAddPacket",
     "RequestXferPacket", "SendXferPacket", "ConfirmXferPacket", "TransferInfoPacket", "TransferPacket",
-    "RequestImagePacket", "ImageDataPacket", "ImageNotInDatabasePacket", # Added Image packets
+    "RequestImagePacket", "ImageDataPacket", "ImageNotInDatabasePacket",
+    "AssetUploadRequestPacket", "AssetUploadCompletePacket",
+    "UpdateCreateInventoryItemPacket", "UpdateInventoryItemPacket", # Added server-side packet
+    "OfferFriendshipPacket", "AcceptFriendshipPacket", "DeclineFriendshipPacket",
+    "OnlineNotificationPacket", "OfflineNotificationPacket", "FindAgentPacket", "AgentOnlineStatusPacket",
+    "ChangeUserRightsPacket", "TerminateFriendshipPacket"
 ]

@@ -26,7 +26,24 @@ class PacketType(enum.Enum):
     ObjectSelect = 17; ObjectDeselect = 18; ObjectLink = 29; ObjectDelink = 30
     ObjectMove = 31; ObjectScale = 32; ObjectRotation = 33
     ObjectName = 34; ObjectDescription = 35; ObjectText = 36; ObjectClickAction = 37
-    ObjectAdd = 38 # Client -> Server to create/rez an object
+    ObjectAdd = 38
+    ObjectAdd = 38
+    AssetUploadRequest = 39
+    AssetUploadComplete = 40
+    UpdateCreateInventoryItem = 41 # Client -> Server
+    UpdateInventoryItem = 41       # Server -> Client (Uses the same ID as request, but different direction/content)
+
+    # Friends Packets (Client -> Server)
+    OfferFriendship = 111      # Low Freq (0xFFFFFF6F)
+    AcceptFriendship = 112     # Low Freq (0xFFFFFF70)
+    DeclineFriendship = 113    # Low Freq (0xFFFFFF71)
+    OnlineNotification = 114   # Low Freq (0xFFFFFF72) - Server to Client
+    OfflineNotification = 115  # Low Freq (0xFFFFFF73) - Server to Client
+    FindAgent = 116            # Low Freq (0xFFFFFF74) - Client to Server
+    AgentOnlineStatus = 117    # Low Freq (0xFFFFFF75) - Server to Client
+    ChangeUserRights = 118     # Low Freq (0xFFFFFF76) - Client to Server
+    TerminateFriendship = 119  # Low Freq (0xFFFFFF77) - Client to Server
+
 
     # Image/Texture Packets (UDP)
     RequestImage = 19

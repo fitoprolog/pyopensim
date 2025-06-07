@@ -21,15 +21,23 @@ from pylibremetaverse.types import CustomUUID, Primitive, Vector3, Quaternion
 from pylibremetaverse.types.enums import (
     TeleportStatus, TeleportFlags, InstantMessageDialog, ScriptPermission,
     MuteType, MuteFlags, WearableType, ClickAction, # Added ClickAction
-    PCode, Material, AddFlags, PathCurve, ProfileCurve, FolderType, ImageType
+    PCode, Material, AddFlags, PathCurve, ProfileCurve, FolderType, ImageType,
+    AssetType, InventoryType, SaleType, PermissionMask # Added for notecard creation
 )
 from pylibremetaverse.types.animations import Animations
 from pylibremetaverse.types.color import Color4 # For TE generation
 from pylibremetaverse.types.inventory_defs import InventoryBase, InventoryFolder, InventoryItem # For type checking in print_folder_recursive
 import struct # For TE generation
-from pylibremetaverse.types.enums import AssetType # For on_asset_received type hint
+# from pylibremetaverse.types.enums import AssetType # Already imported above
 # Import Asset base and subclasses for type checking in on_asset_received
-from pylibremetaverse.assets import Asset, AssetNotecard, AssetLandmark
+from pylibremetaverse.assets import Asset, AssetNotecard, AssetLandmark, AssetScript # Added AssetScript
+# Import FriendsManager related types for handlers (though args are passed directly)
+from pylibremetaverse.managers.friends_manager import FriendsManager
+# Import event args dataclasses from FriendsManager for type hinting
+from pylibremetaverse.managers.friends_manager import (
+    FriendOnlineStatusEventArgs, FriendRightsEventArgs, FriendRemovedEventArgs
+)
+
 
 test_client_instance: GridClient | None = None
 
@@ -53,12 +61,13 @@ def on_script_question(args: ScriptQuestionEventArgs):
 def on_mute_list_updated(mutes: Dict[str,MuteEntry]): logging.info(f"[MuteListUpdated] Count: {len(mutes)}")
 def on_wearables_updated(wearables: Dict[WearableType, Tuple[CustomUUID, CustomUUID]]):
     logging.info(f"[WearablesUpdated] Agent wearing {len(wearables)} items: {wearables}")
-    # if test_client_instance and test_client_instance.appearance.wearables: # Check if wearables are populated
-    #     placeholder_te = bytes([0]*Primitive.TEXTURE_ENTRY_DEFAULT_SIZE)
-    #     asyncio.create_task(test_client_instance.appearance.set_appearance(texture_entry_override=placeholder_te))
-
-    # --- Test Texture Request ---
     if test_client_instance:
+        # After wearables are updated (e.g. on login or after wearing/taking off),
+        # call set_appearance to update the avatar with the new logic.
+        logging.info("Wearables updated, triggering set_appearance to reflect changes.")
+        asyncio.create_task(test_client_instance.appearance.set_appearance())
+
+        # --- Test Texture Request (existing logic, can remain) ---
         texture_to_request_item_id: CustomUUID | None = None
         texture_to_request_asset_id: CustomUUID | None = None
         wearable_type_for_texture: WearableType | None = None
@@ -87,7 +96,11 @@ def on_asset_received(success: bool, asset_obj_or_data: Any, asset_type_enum: As
                         error_message: str | None = None):
     """Callback for when an asset is received (or fails)."""
     if success:
-        if isinstance(asset_obj_or_data, AssetNotecard) and asset_obj_or_data.loaded_successfully:
+        if isinstance(asset_obj_or_data, AssetWearable) and asset_obj_or_data.loaded_successfully:
+            logging.info(f"Wearable asset {asset_uuid} (VFile: {vfile_id_for_callback}) received and parsed. Name: '{asset_obj_or_data.name}', Type: {asset_obj_or_data.wearable_type.name}")
+            logging.info(f"  Textures: {asset_obj_or_data.textures}")
+            logging.info(f"  Parameters: {asset_obj_or_data.parameters}")
+        elif isinstance(asset_obj_or_data, AssetNotecard) and asset_obj_or_data.loaded_successfully:
             logging.info(f"Notecard asset {asset_uuid} (VFile: {vfile_id_for_callback}) received and parsed. Name: '{asset_obj_or_data.name}', Body preview: '{asset_obj_or_data.body_text[:100].replace(chr(10), ' ')}...'")
         elif isinstance(asset_obj_or_data, AssetLandmark) and asset_obj_or_data.loaded_successfully:
             logging.info(f"Landmark asset {asset_uuid} (VFile: {vfile_id_for_callback}) received and parsed. Name: '{asset_obj_or_data.name}', Region: {asset_obj_or_data.region_handle}, Pos: {asset_obj_or_data.position}")
@@ -181,7 +194,7 @@ def on_object_updated(prim: Primitive, simulator: Simulator):
 def on_object_removed(local_id: int, simulator: Simulator):
     logging.info(f"[ObjectRemoved] Sim: {simulator.name}, Prim LocalID: {local_id}")
 
-def on_inventory_updated(inventory_items: Dict[CustomUUID, InventoryBase]): # Added
+def on_inventory_updated(inventory_items: Dict[CustomUUID, InventoryBase]):
     """Called when the inventory skeleton is updated."""
     logging.info(f"[InventoryUpdated] Inventory skeleton potentially updated. Current total: {len(inventory_items)} items/folders.")
 
@@ -193,8 +206,9 @@ def on_inventory_updated(inventory_items: Dict[CustomUUID, InventoryBase]): # Ad
         if inventory_mgr.inventory_root_uuid and not hasattr(test_client_instance, '_folder_created_test_done'):
             test_client_instance._folder_created_test_done = True # Set flag to run once
 
-            async def create_folder_test():
-                await asyncio.sleep(5) # Wait a bit after initial inventory load
+            async def inventory_manipulation_tests():
+                # --- Create Folder Test ---
+                await asyncio.sleep(5) # Wait a bit after initial inventory load for inventory to (hopefully) be somewhat stable
                 logging.info("--- Attempting to create a new folder in inventory root... ---")
                 new_folder_name = f"PyLibreMV Test Folder {datetime.datetime.now().strftime('%H%M%S')}"
                 try:
@@ -283,7 +297,70 @@ def on_inventory_updated(inventory_items: Dict[CustomUUID, InventoryBase]): # Ad
                 except Exception as e:
                     logging.exception(f"Exception during create_folder: {e}")
 
-            asyncio.create_task(create_folder_test())
+                # --- Create Notecard Test (Chained after folder tests) ---
+                if test_client_instance and test_client_instance.inventory.inventory_root_uuid:
+                    await asyncio.sleep(2) # Pause before notecard test
+                    logging.info("--- Attempting to create a new notecard... ---")
+                    notecard_text = f"Hello from PyLibreMetaverse!\nThis is a test notecard created at {datetime.datetime.now()}."
+                    notecard_bytes = notecard_text.encode('utf-8')
+
+                    upload_success_event = asyncio.Event()
+                    new_asset_uuid_store = {}
+
+                    def asset_upload_cb(success_upload, asset_uuid_from_cb, asset_type_enum_from_cb):
+                        nonlocal new_asset_uuid_store # To modify the outer scope dict
+                        if success_upload:
+                            logging.info(f"Asset uploaded successfully via callback: {asset_uuid_from_cb} (type {asset_type_enum_from_cb})")
+                            new_asset_uuid_store['uuid'] = asset_uuid_from_cb
+                        else:
+                            logging.error("Asset upload failed via callback.")
+                        upload_success_event.set()
+
+                    # Use the transaction_id returned by upload_asset to manage the callback context more explicitly if needed,
+                    # but AssetManager's _last_upload_transaction_id_for_callback should handle it for single uploads.
+                    # For this test, we directly await the event that the callback sets.
+                    logging.info("Calling client.assets.upload_asset for notecard...")
+                    transaction_id = await test_client_instance.assets.upload_asset(
+                        notecard_bytes, AssetType.Notecard, callback=asset_upload_cb
+                    )
+
+                    if transaction_id != CustomUUID.ZERO:
+                        logging.info(f"AssetUploadRequest sent with TransactionID: {transaction_id}. Waiting for callback...")
+                        try:
+                            await asyncio.wait_for(upload_success_event.wait(), timeout=30.0) # Wait for upload to complete
+                        except asyncio.TimeoutError:
+                            logging.error("Timeout waiting for asset upload callback.")
+
+                        new_asset_uuid = new_asset_uuid_store.get('uuid')
+                        if new_asset_uuid:
+                            logging.info(f"Creating inventory item for notecard asset {new_asset_uuid}")
+                            default_permissions = {
+                                'base': PermissionMask.ALL, 'owner': PermissionMask.ALL,
+                                'group': PermissionMask.ALL, 'everyone': PermissionMask.NONE,
+                                'next_owner': PermissionMask.ALL & ~PermissionMask.COPY & ~PermissionMask.TRANSFER
+                            }
+                            created_item = await inventory_mgr.create_inventory_item(
+                                inventory_mgr.inventory_root_uuid, # Create in root for test
+                                f"My PyLibreMV Notecard {datetime.datetime.now().strftime('%H%M%S')}",
+                                "Test notecard created by PyLibreMV.",
+                                AssetType.Notecard, InventoryType.Notecard, new_asset_uuid,
+                                permissions=default_permissions
+                            )
+                            if created_item:
+                                logging.info(f"Notecard inventory item CREATED AND CONFIRMED: {created_item.name} (Server ItemID: {created_item.uuid}, CRC: {created_item.crc32}, AssetID: {created_item.asset_uuid})")
+                            else:
+                                logging.error("Failed to create notecard inventory item (create_inventory_item returned None or failed).")
+                        else:
+                            logging.error("Asset UUID not received after upload callback, cannot create inventory item.")
+                    else:
+                        logging.error("Failed to send AssetUploadRequest (transaction_id was ZERO).")
+
+                # --- Create Script Test ---
+                await asyncio.sleep(2) # Pause before script test
+                await create_test_script(inventory_mgr)
+
+
+            asyncio.create_task(inventory_manipulation_tests())
 
         # --- Recursive print example ---
         # Local helper function to avoid passing client instance around or making it global in this scope
@@ -338,14 +415,18 @@ def on_inventory_updated(inventory_items: Dict[CustomUUID, InventoryBase]): # Ad
 
                 logging.info(f"--- Attempting to wear: {wearable_item_to_test.name} ---")
                 await test_client_instance.appearance.wear_items([wearable_item_to_test])
-                logging.info(f"wear_items called for {wearable_item_to_test.name}. Check server/viewer for appearance change.")
+                logging.info(f"wear_items called for {wearable_item_to_test.name}. Calling set_appearance...")
+                await asyncio.sleep(1) # Give a moment for internal state
+                await test_client_instance.appearance.set_appearance() # Update appearance after wearing
 
                 logging.info(f"--- Waiting for 10 seconds after wearing {wearable_item_to_test.name} ---")
                 await asyncio.sleep(10)
 
                 logging.info(f"--- Attempting to take off: {wearable_item_to_test.name} ---")
                 await test_client_instance.appearance.take_off_items([wearable_item_to_test])
-                logging.info(f"take_off_items called for {wearable_item_to_test.name}. Check server/viewer for appearance change.")
+                logging.info(f"take_off_items called for {wearable_item_to_test.name}. Calling set_appearance...")
+                await asyncio.sleep(1) # Give a moment for internal state
+                await test_client_instance.appearance.set_appearance() # Update appearance after taking off
 
             asyncio.create_task(wear_and_log())
         else:
@@ -376,6 +457,12 @@ async def main():
     client.objects.register_object_updated_handler(on_object_updated)
     client.objects.register_object_removed_handler(on_object_removed)
     client.inventory.register_inventory_updated_handler(on_inventory_updated)
+    # FriendsManager handlers
+    client.friends.register_friendship_offered_handler(on_friendship_offered)
+    client.friends.register_friendship_response_handler(on_friendship_response)
+    client.friends.register_online_status_changed_handler(on_friend_online_status_changed)
+    client.friends.register_rights_changed_handler(on_friend_rights_changed) # Added
+    client.friends.register_friend_removed_handler(on_friend_removed) # Added
 
     logging.info(f"Login: {creds['first']} {creds['last']} to {creds['uri']}...")
     success = False
@@ -476,8 +563,64 @@ async def main():
                 #     logging.info("No objects found in sim to test selection/linking.")
 
                 # Extended idle time to observe wearable changes if any
-                logging.info("Client will now idle for 20 seconds to observe potential appearance changes.")
-                await asyncio.sleep(20)
+                logging.info("Client will now idle for 10 seconds before friendship test.")
+                await asyncio.sleep(10)
+
+                # --- Test Friendship Offer ---
+                # Replace with a known UUID of an alt or another bot for testing.
+                # Ensure the target avatar is online and can receive friendship offers.
+                target_friend_uuid_str = os.getenv("PYLIBREMV_FRIEND_TEST_UUID", "00000000-0000-0000-0000-000000000000")
+                if target_friend_uuid_str != "00000000-0000-0000-0000-000000000000":
+                    target_friend_uuid = CustomUUID(target_friend_uuid_str)
+                    logging.info(f"--- Attempting to offer friendship to {target_friend_uuid} ---")
+                    await client.friends.offer_friendship(target_friend_uuid, "Hello from PyLibreMetaverse test client!")
+                    # Wait for a response or timeout (handled by IMs and logged by handlers)
+                    await asyncio.sleep(10) # Wait to see if response comes in
+                else:
+                    logging.warning("PYLIBREMV_FRIEND_TEST_UUID not set. Skipping friendship offer test.")
+
+                # Request online status for all known friends after a short delay
+                await asyncio.sleep(2) # Ensure buddy list might have been processed
+                if client.friends.friends: # Check if there are any friends
+                    friend_uuids_to_query = list(client.friends.friends.keys())
+                    logging.info(f"--- Requesting online status for {len(friend_uuids_to_query)} friends... ---")
+                    asyncio.create_task(client.friends.request_online_statuses(friend_uuids_to_query))
+                else:
+                    logging.info("No friends in the list to query for online status.")
+
+                # --- Test Grant Rights and Terminate Friendship ---
+                # This needs a specific friend UUID to target.
+                # For safety, use a dedicated test alt or bot UUID.
+                # You might want to run this part conditionally based on an env var.
+                # Example: PYLIBREMV_FRIEND_MODIFY_UUID
+                modify_friend_uuid_str = os.getenv("PYLIBREMV_FRIEND_MODIFY_UUID")
+                if modify_friend_uuid_str:
+                    modify_friend_uuid = CustomUUID(modify_friend_uuid_str)
+                    if client.friends.is_friend(modify_friend_uuid):
+                        logging.info(f"--- Testing rights management for friend {modify_friend_uuid} ---")
+                        # Grant additional rights (e.g., modify objects)
+                        new_rights = FriendRights.CAN_SEE_ONLINE | FriendRights.CAN_SEE_ON_MAP | FriendRights.CAN_MODIFY_OBJECTS
+                        logging.info(f"Granting rights {new_rights!r} to {modify_friend_uuid}")
+                        await client.friends.grant_rights(modify_friend_uuid, new_rights)
+                        await asyncio.sleep(5) # Wait for potential updates or just to observe logs
+
+                        # Example: Terminate friendship (use with extreme caution on real accounts)
+                        terminate_this_friend = os.getenv("PYLIBREMV_TERMINATE_FRIEND_TEST", "false").lower() == "true"
+                        if terminate_this_friend:
+                            logging.info(f"--- Attempting to terminate friendship with {modify_friend_uuid} ---")
+                            await client.friends.terminate_friendship(modify_friend_uuid)
+                            await asyncio.sleep(2)
+                        else:
+                            logging.info(f"Skipping terminate_friendship test for {modify_friend_uuid} (PYLIBREMV_TERMINATE_FRIEND_TEST not true).")
+                    else:
+                        logging.warning(f"Cannot test rights/terminate: {modify_friend_uuid} is not currently a friend.")
+                else:
+                    logging.info("PYLIBREMV_FRIEND_MODIFY_UUID not set. Skipping grant_rights/terminate_friendship tests.")
+
+
+                logging.info("Client will now idle for another 10 seconds.")
+                await asyncio.sleep(10)
+
             else: logging.warning("No handshaked sim. Skipping test actions."); await asyncio.sleep(5)
             logging.info("Attempting logout..."); await client.network.logout(); await asyncio.sleep(2)
         else: logging.error(f"Login failed. Status: {client.network.login_status.name if client.network.login_status else 'N/A'}, Msg: {client.network.login_message}")
@@ -493,3 +636,99 @@ if __name__=="__main__":
     except KeyboardInterrupt: logging.info("Terminated by user.")
     except Exception as e: logging.exception(f"Unhandled exception: {e}")
     finally: logging.info("Exiting.")
+
+
+# --- Friendship Handlers ---
+def on_friendship_offered(offerer_uuid: CustomUUID, offerer_name: str, message: str, session_id: CustomUUID):
+    logging.info(f"[FriendshipOffered] From: {offerer_name} ({offerer_uuid}), Message: '{message}', SessionID: {session_id}")
+    # Example: Automatically accept offers from a specific test agent or if a keyword is in the message
+    # For general testing, you might want to log and manually decide or have a more complex auto-accept rule.
+    auto_accept_offer = os.getenv("PYLIBREMV_AUTO_ACCEPT_FRIENDSHIP", "false").lower() == "true"
+
+    if auto_accept_offer and test_client_instance:
+        logging.info(f"Auto-accepting friendship offer from {offerer_name} ({offerer_uuid}).")
+        asyncio.create_task(test_client_instance.friends.accept_friendship_offer(offerer_uuid, session_id))
+    # To decline:
+    # asyncio.create_task(test_client_instance.friends.decline_friendship_offer(offerer_uuid, session_id))
+
+def on_friendship_response(friend_uuid: CustomUUID, accepted: bool):
+    logging.info(f"[FriendshipResponse] From: {friend_uuid}, Accepted: {accepted}")
+    if accepted:
+        logging.info(f"Friendship with {friend_uuid} is now active (or was already).")
+    else:
+        logging.info(f"Friendship with {friend_uuid} was declined or terminated.")
+
+def on_friend_online_status_changed(args: FriendOnlineStatusEventArgs):
+    logging.info(f"[FriendOnlineStatus] Friend: {args.friend_uuid}, Online: {args.is_online}")
+    # You could add more logic here, e.g., update a local UI or list of online friends.
+
+def on_friend_rights_changed(args: FriendRightsEventArgs):
+    logging.info(f"[FriendRightsChanged] Friend: {args.friend_uuid}, TheirRightsToUs: {args.their_rights_to_us!r}, OurRightsToThem: {args.our_rights_to_them!r}")
+
+def on_friend_removed(args: FriendRemovedEventArgs):
+    logging.info(f"[FriendRemoved] Friend: {args.friend_uuid} has been removed from friends list.")
+
+
+async def create_test_script(inventory_mgr: InventoryManager):
+    """Tests creating and uploading a new LSL script asset and then creating an inventory item for it."""
+    if not test_client_instance or not test_client_instance.assets or not inventory_mgr.inventory_root_uuid:
+        logging.error("Cannot create test script: Client, AssetManager, or inventory root not available.")
+        return
+
+    logging.info("--- Attempting to create and upload a new LSL script... ---")
+    # Make the script larger than SMALL_ASSET_THRESHOLD_BYTES (1024) to test Xfer path
+    lsl_code_base = "default { state_entry() { llSay(0, \"Hello, PyLibreMetaverse Script! This is a test script designed to be larger than 1KB to test the Xfer upload mechanism. Padding... Padding... Padding...\"); } }"
+    padding_needed = 1024 - len(lsl_code_base) + 50 # Ensure it's definitely over
+    if padding_needed < 0: padding_needed = 0
+    lsl_code = lsl_code_base + (" " * padding_needed) + "\n// End of padding."
+
+    logging.info(f"Test script content generated (Length: {len(lsl_code)} bytes). Target threshold: {test_client_instance.assets.SMALL_ASSET_THRESHOLD_BYTES if test_client_instance else 'N/A'}")
+
+    script_asset = AssetScript(script_text=lsl_code)
+    script_asset.name = f"PyTestScript_Xfer_{datetime.datetime.now().strftime('%H%M%S')}"
+    script_asset.description = "A test script (potentially large) created by PyLibreMetaverse test client."
+    # AssetType.LSLText is set by default in AssetScript __post_init__
+
+    logging.info(f"Attempting to upload script asset: Name='{script_asset.name}', Size={len(script_asset.to_upload_bytes())}, Type={script_asset.asset_type.name}")
+
+    try:
+        upload_success, new_asset_uuid, uploaded_asset_type = await test_client_instance.assets.upload_asset_object(
+            script_asset
+        )
+
+        logging.info(f"upload_asset_object result: Success={upload_success}, AssetUUID={new_asset_uuid}, AssetType={uploaded_asset_type.name if uploaded_asset_type else 'N/A'}")
+
+        if upload_success and new_asset_uuid:
+            logging.info(f"Script asset uploaded successfully. New Asset UUID: {new_asset_uuid}. Now creating inventory item...")
+
+            # Define permissions for the new script item
+            # Full perms for owner, typically Copy/Mod/Trans for next owner for scripts.
+            # No perms for group or everyone by default unless specified.
+            default_permissions = {
+                'base_mask': PermissionMask.ALL, # Base perms of the item itself (usually not directly relevant for scripts as they use next_owner)
+                'owner_mask': PermissionMask.ALL,
+                'group_mask': PermissionMask.NONE,
+                'everyone_mask': PermissionMask.NONE,
+                'next_owner_mask': PermissionMask.COPY | PermissionMask.MODIFY | PermissionMask.TRANSFER,
+            }
+            logging.info(f"Using permissions for new script item: Owner={default_permissions['owner_mask']!r}, NextOwner={default_permissions['next_owner_mask']!r}")
+
+            created_item = await inventory_mgr.create_inventory_item(
+                parent_folder_uuid=inventory_mgr.inventory_root_uuid,
+                name=script_asset.name,
+                description=script_asset.description,
+                asset_type=AssetType.LSLText,
+                inv_type=InventoryType.LSL,
+                asset_uuid=new_asset_uuid, # Use the UUID from the successful asset upload
+                permissions=default_permissions
+            )
+
+            if created_item:
+                logging.info(f"Script inventory item CREATED AND CONFIRMED: Name='{created_item.name}', ItemID='{created_item.uuid}', AssetID='{created_item.asset_uuid}', CRC={created_item.crc32}")
+                logging.info(f"  Full details: {created_item}")
+            else:
+                logging.error(f"Failed to create script inventory item for asset {new_asset_uuid} (create_inventory_item returned None).")
+        else:
+            logging.error(f"Failed to upload script asset. Success: {upload_success}, Asset UUID: {new_asset_uuid}, Type: {uploaded_asset_type.name if uploaded_asset_type else 'N/A'}")
+    except Exception as e:
+        logging.exception(f"Exception during script creation/upload: {e}")

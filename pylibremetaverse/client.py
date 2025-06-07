@@ -52,6 +52,15 @@ class GridClient:
         self.http_caps_client: HttpCapsClient | None = None # Setup by NetworkManager after login via _setup_http_caps_client
         self._setup_http_caps_client() # Initial setup, might be reconfigured after login
 
+        # Register FriendsManager IM handler with AgentManager
+        if self.self and self.friends:
+            # Assuming AgentManager (self.self) has register_im_handler
+            # and FriendsManager has _handle_im_for_friendship
+            self.self.register_im_handler(self.friends._handle_im_for_friendship)
+            logger.debug("Registered FriendsManager IM handler with AgentManager.")
+        else:
+            logger.warning("Could not register FriendsManager IM handler: AgentManager or FriendsManager not available.")
+
         logger.info("GridClient initialized with all managers.")
 
     def _setup_http_caps_client(self):

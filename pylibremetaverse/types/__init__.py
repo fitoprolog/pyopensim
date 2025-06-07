@@ -13,13 +13,20 @@ from .enums import (
     TeleportFlags, TeleportStatus,
     ScriptPermission,
     MuteType, MuteFlags, ClickAction,
-    PathCurve, ProfileCurve, SaleType,
+    PathCurve, ProfileCurve, HoleType, SaleType, # Added HoleType
     PermissionMask, InventoryItemFlags,
-    ChannelType, TargetType, StatusCode, TransferStatus # Added Xfer enums
+    ChannelType, TargetType, StatusCode, TransferStatus,
+    AddFlags, ImageType, FolderType # Added more recent enums
 )
 from .animations import Animations
-from .primitive import Primitive
+from .primitive import Primitive, TextureEntryFace, TextureEntry, MAX_AVATAR_FACES # Added TE
 from .inventory_defs import InventoryBase, InventoryFolder, InventoryItem
+from .default_textures import ( # Added default textures
+    DEFAULT_SKIN_TEXTURE, DEFAULT_EYES_TEXTURE, DEFAULT_HAIR_TEXTURE,
+    DEFAULT_SHIRT_TEXTURE, DEFAULT_PANTS_TEXTURE
+)
+from .friends_defs import FriendRights, FriendInfo, BuddyListEntry # Added Friends defs
+
 
 __all__ = [
     "CustomUUID", "Vector2", "Vector3", "Vector4", "Quaternion", "Matrix4", "Color4",
@@ -30,9 +37,14 @@ __all__ = [
     "TeleportFlags", "TeleportStatus",
     "ScriptPermission",
     "MuteType", "MuteFlags", "ClickAction",
-    "PathCurve", "ProfileCurve", "SaleType",
+    "PathCurve", "ProfileCurve", "HoleType", "SaleType",
     "PermissionMask", "InventoryItemFlags",
+    "ChannelType", "TargetType", "StatusCode", "TransferStatus",
+    "AddFlags", "ImageType", "FolderType",
     "Animations",
-    "Primitive",
-    "InventoryBase", "InventoryFolder", "InventoryItem", # Added
+    "Primitive", "TextureEntryFace", "TextureEntry", "MAX_AVATAR_FACES",
+    "InventoryBase", "InventoryFolder", "InventoryItem",
+    "DEFAULT_SKIN_TEXTURE", "DEFAULT_EYES_TEXTURE", "DEFAULT_HAIR_TEXTURE",
+    "DEFAULT_SHIRT_TEXTURE", "DEFAULT_PANTS_TEXTURE",
+    "FriendRights", "FriendInfo", "BuddyListEntry" # Added Friends defs
 ]

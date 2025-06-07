@@ -17,10 +17,14 @@ from .packets_object import (
     ObjectUpdatePacket, ObjectUpdateCachedPacket, ImprovedTerseObjectUpdatePacket,
     KillObjectPacket, ObjectPropertiesFamilyPacket, ObjectPropertiesPacket
 )
-from .packets_asset import ( # Added Asset packets
+from .packets_asset import (
     TransferInfoPacket, TransferPacket, SendXferPacket,
-    ImageDataPacket, ImageNotInDatabasePacket # Added Image packets
+    ImageDataPacket, ImageNotInDatabasePacket, AssetUploadCompletePacket
 )
+from .packets_friends import ( # Added for new friend status packets
+    OnlineNotificationPacket, OfflineNotificationPacket, AgentOnlineStatusPacket
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +69,22 @@ def from_bytes(payload_with_type_markers: bytes, header: PacketHeader) -> Packet
         elif type_byte == 0x23: packet_class=TransferInfoPacket; packet_enum_type_for_logging=PacketType.TransferInfo
         elif type_byte == 0x22: packet_class=TransferPacket; packet_enum_type_for_logging=PacketType.TransferPacket
         elif type_byte == 0x25: packet_class=SendXferPacket; packet_enum_type_for_logging=PacketType.SendXferPacket
-        elif type_byte == 0x1B: packet_class=ImageNotInDatabasePacket; packet_enum_type_for_logging=PacketType.ImageNotInDatabase # Value 27 (0x1B)
+        elif type_byte == 0x1B: packet_class=ImageNotInDatabasePacket; packet_enum_type_for_logging=PacketType.ImageNotInDatabase
+        elif type_byte == 0x28: packet_class=AssetUploadCompletePacket; packet_enum_type_for_logging=PacketType.AssetUploadComplete
+        elif type_byte == 0x29: # Value 41 (0x29) - Server to Client is UpdateInventoryItemPacket
+            from pylibremetaverse.network.packets_inventory import UpdateInventoryItemPacket
+            packet_class=UpdateInventoryItemPacket; packet_enum_type_for_logging=PacketType.UpdateInventoryItem
+        # Friend Online Status Packets
+        elif type_byte == 0x72: packet_class=OnlineNotificationPacket; packet_enum_type_for_logging=PacketType.OnlineNotification
+        elif type_byte == 0x73: packet_class=OfflineNotificationPacket; packet_enum_type_for_logging=PacketType.OfflineNotification
+        elif type_byte == 0x75: packet_class=AgentOnlineStatusPacket; packet_enum_type_for_logging=PacketType.AgentOnlineStatus
+        # Asset Xfer packets (Server -> Client for uploads)
+        elif type_byte == 0x24: # RequestXfer can be sent by server to initiate upload
+            from pylibremetaverse.network.packets_asset import RequestXferPacket as ServerRequestXferPacket
+            packet_class=ServerRequestXferPacket; packet_enum_type_for_logging=PacketType.RequestXfer
+        elif type_byte == 0x26: # ConfirmXferPacket can be sent by server to confirm upload chunk
+            from pylibremetaverse.network.packets_asset import ConfirmXferPacket as ServerConfirmXferPacket
+            packet_class=ServerConfirmXferPacket; packet_enum_type_for_logging=PacketType.ConfirmXferPacket
         else: logger.debug(f"Unknown Low Freq packet type: 0xFFFFFF{type_byte:02X}. Seq={header.sequence}")
         if packet_class: body_payload = payload_with_type_markers[4:]
 

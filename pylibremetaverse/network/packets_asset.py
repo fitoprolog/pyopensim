@@ -40,42 +40,75 @@ class RequestXferPacket(Packet):
         # data.append(1 if self.delete_on_completion else 0)
         # data.append(1 if self.use_big_packets else 0)
         return bytes(data)
-    def from_bytes_body(self,b,o,l):logger.warning("Client doesn't receive RequestXfer.");return self
+
+    def from_bytes_body(self, buffer: bytes, offset: int, length: int) -> "RequestXferPacket":
+        """Parses a RequestXferPacket, typically when server initiates an upload Xfer."""
+        initial_offset = offset
+        self.xfer_id = helpers.bytes_to_uint64(buffer, offset); offset += 8
+        self.vfile_id = CustomUUID(initial_bytes=buffer[offset : offset+16]); offset += 16
+        self.vfile_type = helpers.bytes_to_int16(buffer, offset); offset += 2 # s16
+
+        # FilePath might be empty or not present in server->client RequestXfer for upload
+        filename_end = buffer.find(b'\0', offset)
+        if filename_end != -1 and filename_end < initial_offset + length:
+            self.filename_bytes = buffer[offset:filename_end]
+            # offset = filename_end + 1 # Not strictly needed as it's the last field we parse here
+        else: # No null term or empty path
+            self.filename_bytes = b''
+            # offset += 0 # Path was empty or not fully there
+
+        # delete_on_completion and use_big_packets are not typically sent by server in this context.
+        logger.info(f"Parsed server-sent RequestXfer: XferID={self.xfer_id}, VFileID={self.vfile_id}, Type={self.vfile_type}")
+        return self
 
 
-# --- SendXferPacket (Server -> Client) ---
+# --- SendXferPacket (Bidirectional, but context determines sender/receiver) ---
 class SendXferPacket(Packet):
-    """Server sends a chunk of data for an Xfer download."""
-    def __init__(self, header: PacketHeader | None = None):
+    """Contains a chunk of data for an Xfer transfer (download or upload)."""
+    def __init__(self, xfer_id: int = 0, packet_num: int = 0, data_chunk: bytes = b'',
+                 header: PacketHeader | None = None):
         super().__init__(PacketType.SendXferPacket, header if header else PacketHeader())
-        self.xfer_id: int = 0 # u64, identifies the transfer session
-        self.packet_num: int = 0 # u32, sequence number for this chunk within the xfer
-        self.data: bytes = b'' # The actual data chunk (up to 1000 bytes for standard Xfer)
+        self.xfer_id: int = xfer_id # u64, identifies the transfer session
+        self.packet_num: int = packet_num # u32, sequence number for this chunk
+        self.data: bytes = data_chunk # The actual data chunk
 
-    def from_bytes_body(self, buffer: bytes, offset: int, length: int):
-        if length < 12: raise ValueError("SendXferPacket body too short for XferID and PacketNum.")
+    def from_bytes_body(self, buffer: bytes, offset: int, length: int) -> "SendXferPacket":
+        # Used when client receives this packet (download)
+        if length < 12: raise ValueError("SendXferPacket (from_bytes) body too short for XferID and PacketNum.")
         self.xfer_id = helpers.bytes_to_uint64(buffer, offset); offset += 8
         self.packet_num = helpers.bytes_to_uint32(buffer, offset); offset += 4
-        self.data = buffer[offset : offset + (length - 12)] # Rest is data
+        self.data = buffer[offset : offset + (length - 12)]
         return self
-    def to_bytes(self)->bytes:logger.warning("Client doesn't send SendXferPacket.");return b''
+
+    def to_bytes(self) -> bytes:
+        # Used when client sends this packet (upload)
+        packet_data = bytearray()
+        packet_data.extend(helpers.uint64_to_bytes(self.xfer_id))
+        packet_data.extend(helpers.uint32_to_bytes(self.packet_num))
+        packet_data.extend(self.data)
+        return bytes(packet_data)
 
 
-# --- ConfirmXferPacket (Client -> Server) ---
+# --- ConfirmXferPacket (Bidirectional) ---
 class ConfirmXferPacket(Packet):
-    """Client confirms receipt of a data chunk from SendXferPacket."""
-    def __init__(self, xfer_id: int, packet_num: int, header: PacketHeader | None = None):
+    """Confirms receipt of a data chunk from SendXferPacket."""
+    def __init__(self, xfer_id: int = 0, packet_num: int = 0, header: PacketHeader | None = None):
         super().__init__(PacketType.ConfirmXferPacket, header if header else PacketHeader())
         self.xfer_id: int = xfer_id # u64
         self.packet_num: int = packet_num # u32
-        self.header.reliable = True # Confirmation should be reliable
+        # Reliability is set by AssetManager depending on context (client send = reliable)
 
-    def to_bytes(self) -> bytes:
+    def to_bytes(self) -> bytes: # Client sends this for downloads
         data = bytearray()
         data.extend(helpers.uint64_to_bytes(self.xfer_id))
         data.extend(helpers.uint32_to_bytes(self.packet_num))
         return bytes(data)
-    def from_bytes_body(self,b,o,l):logger.warning("Client doesn't receive ConfirmXferPacket.");return self
+
+    def from_bytes_body(self, buffer: bytes, offset: int, length: int) -> "ConfirmXferPacket": # Server sends this for uploads
+        if length < 12: raise ValueError("ConfirmXferPacket body too short.")
+        self.xfer_id = helpers.bytes_to_uint64(buffer, offset); offset += 8
+        self.packet_num = helpers.bytes_to_uint32(buffer, offset); offset += 4
+        return self
 
 
 # --- TransferInfoPacket (Server -> Client) ---
@@ -260,4 +293,98 @@ class ImageDataPacket(Packet): # Server -> Client
 
     def to_bytes(self) -> bytes:
         logger.warning("Client doesn't send ImageDataPacket.")
+        return b''
+
+
+# --- Asset Upload Packets ---
+
+@dataclasses.dataclass
+class AssetUploadRequestAssetBlock: # For AssetUploadRequestPacket
+    TransactionID: CustomUUID # New random UUID for this upload session
+    Type: int             # sbyte, from AssetType enum
+    Tempfile: bool        # bool, True if asset is short-lived (e.g., for immediate use like baking)
+    Public: bool          # bool, True if asset is public (not used often, permissions handle this)
+    StoreLocal: bool      # bool, True if asset should be stored locally by server (viewer internal use, often false)
+    Size: int = 0         # int32, True size of the asset, even if Data field is empty for Xfer
+    Data: bytes | None = None # Asset data for small assets. If None or empty for large assets, server may initiate Xfer.
+
+class AssetUploadRequestPacket(Packet): # Client -> Server
+    """Client initiates an asset upload, potentially with data for small assets."""
+    def __init__(self, transaction_id: CustomUUID, asset_type: AssetType,
+                 asset_size: int, # True size of the asset
+                 is_temp: bool, is_public: bool, store_local: bool,
+                 data: bytes | None, # Actual data chunk, can be None or empty for Xfer
+                 header: PacketHeader | None = None):
+        super().__init__(PacketType.AssetUploadRequest, header if header else PacketHeader())
+        self.asset_block = AssetUploadRequestAssetBlock(
+            TransactionID=transaction_id,
+            Type=asset_type.value,
+            Tempfile=is_temp,
+            Public=is_public,
+            StoreLocal=store_local,
+            Size=asset_size,
+            Data=data if data is not None else b'' # Store empty bytes if None, for len()
+        )
+        self.header.reliable = True
+
+    def to_bytes(self) -> bytes:
+        data_bytes = bytearray()
+        # AssetBlock
+        data_bytes.extend(self.asset_block.TransactionID.get_bytes())
+        data_bytes.append(self.asset_block.Type & 0xFF) # sbyte in C#, pack as byte
+        data_bytes.append(1 if self.asset_block.Tempfile else 0)
+        data_bytes.append(1 if self.asset_block.Public else 0)
+        data_bytes.append(1 if self.asset_block.StoreLocal else 0)
+        data_bytes.extend(helpers.int32_to_bytes(self.asset_block.Size)) # Add true asset size
+
+        # Data is variable length, prefixed by its size (u32)
+        # If self.asset_block.Data is b'', len is 0, correct for Xfer initiation.
+        actual_data_to_send = self.asset_block.Data if self.asset_block.Data is not None else b''
+        data_bytes.extend(helpers.uint32_to_bytes(len(actual_data_to_send)))
+        data_bytes.extend(actual_data_to_send)
+        return bytes(data_bytes)
+
+    def from_bytes_body(self, buffer: bytes, offset: int, length: int):
+        logger.warning("Client doesn't receive AssetUploadRequestPacket.")
+        return self
+
+
+# AssetBlock in C# AssetUploadCompletePacket includes TransactionID
+@dataclasses.dataclass
+class AssetUploadCompleteAssetBlock: # For AssetUploadCompletePacket
+    TransactionID: CustomUUID # UUID, should match the one from AssetUploadRequestPacket
+    Success: bool       # bool, True if upload was successful
+    AssetUUID: CustomUUID # UUID of the newly uploaded asset (if Success is True)
+    Type: int           # sbyte, from AssetType enum (type of asset that was uploaded)
+
+    @property
+    def type_enum(self) -> AssetType:
+        try: return AssetType(self.Type)
+        except ValueError: return AssetType.Unknown
+
+class AssetUploadCompletePacket(Packet): # Server -> Client
+    """Server confirms asset upload completion and provides the new asset's UUID."""
+    def __init__(self, header: PacketHeader | None = None):
+        super().__init__(PacketType.AssetUploadComplete, header if header else PacketHeader())
+        self.asset_block = AssetUploadCompleteAssetBlock( # Renamed from data_block to asset_block
+            TransactionID=CustomUUID.ZERO,
+            Success=False,
+            AssetUUID=CustomUUID.ZERO,
+            Type=AssetType.Unknown.value
+        )
+
+    def from_bytes_body(self, buffer: bytes, offset: int, length: int):
+        # Min size: TransactionID (16) + Success (1) + AssetUUID (16) + Type (1) = 34 bytes
+        if length < 34:
+            raise ValueError(f"AssetUploadCompletePacket body too short ({length} bytes). Expected at least 34.")
+
+        self.asset_block.TransactionID = CustomUUID(buffer, offset); offset += 16
+        self.asset_block.Success = (buffer[offset] != 0); offset += 1
+        self.asset_block.AssetUUID = CustomUUID(buffer, offset); offset += 16
+        self.asset_block.Type = struct.unpack_from('<b', buffer, offset)[0]; offset += 1 # sbyte
+
+        return self
+
+    def to_bytes(self) -> bytes:
+        logger.warning("Client doesn't send AssetUploadCompletePacket.")
         return b''

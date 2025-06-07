@@ -82,3 +82,26 @@ class AssetLandmark(Asset):
     def __str__(self):
         return (f"{super().__str__()} RegionHandle={self.region_handle}, Position={self.position}, "
                 f"RegionID={self.region_id if self.region_id != CustomUUID.ZERO else 'N/A'}")
+
+    def to_upload_bytes(self) -> bytes:
+        """
+        Serializes the landmark data into "slalm" format for uploading.
+        """
+        # Ensure version is at least 1.2 if not set or older
+        version_to_use = self.landmark_version
+        try:
+            if float(version_to_use) < 1.2: version_to_use = "1.2"
+        except ValueError:
+            version_to_use = "1.2" # Default if current version is not a float
+
+        lm_str = f"slalm version {version_to_use}\n"
+        if self.region_handle > 0: # Region handle is important
+            lm_str += f"region_handle {self.region_handle}\n"
+        # Position is usually always included, even if zero
+        lm_str += f"local_pos {self.position.X} {self.position.Y} {self.position.Z}\n"
+        if self.region_id != CustomUUID.ZERO: # Only include if not zero
+            lm_str += f"region_id {self.region_id}\n"
+
+        # Other fields like 'gatekeeper' or 'god_like' could be added if they were attributes
+        # For now, these are the core components.
+        return lm_str.encode('utf-8')
