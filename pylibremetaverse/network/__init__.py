@@ -40,7 +40,7 @@ from .packets_object import (
     RequestObjectPropertiesFamilyPacket, ObjectPropertiesFamilyPacket, ObjectPropertiesPacket,
     ObjectMovePacket, ObjectScalePacket, ObjectRotationPacket,
     ObjectNamePacket, ObjectDescriptionPacket, ObjectTextPacket, ObjectClickActionPacket,
-    ObjectAddPacket # Added object creation packet
+    ObjectAddPacket, ObjectGrabPacket, ObjectDeGrabPacket # Added Grab/DeGrab
 )
 from .packets_asset import (
     RequestXferPacket, SendXferPacket, ConfirmXferPacket,
@@ -54,7 +54,14 @@ from .packets_inventory import (
 from .packets_friends import (
     OfferFriendshipPacket, AcceptFriendshipPacket, DeclineFriendshipPacket,
     OnlineNotificationPacket, OfflineNotificationPacket, FindAgentPacket, AgentOnlineStatusPacket,
-    ChangeUserRightsPacket, TerminateFriendshipPacket # Added new packets
+    ChangeUserRightsPacket, TerminateFriendshipPacket
+)
+from .packets_parcel import ( # Added Parcel packets
+    ParcelPropertiesRequestPacket, ParcelPropertiesPacket,
+    ParcelAccessListRequestPacket, ParcelAccessListReplyPacket # Added ACL packets
+)
+from .packets_group import ( # Added Group packets
+    AgentGroupDataUpdatePacket, AgentSetGroupPacket # Added AgentSetGroupPacket
 )
 
 __all__ = [
@@ -80,12 +87,15 @@ __all__ = [
     "ObjectPropertiesFamilyPacket", "ObjectPropertiesPacket",
     "ObjectMovePacket", "ObjectScalePacket", "ObjectRotationPacket",
     "ObjectNamePacket", "ObjectDescriptionPacket", "ObjectTextPacket", "ObjectClickActionPacket",
-    "ObjectAddPacket",
+    "ObjectAddPacket", "ObjectGrabPacket", "ObjectDeGrabPacket",
     "RequestXferPacket", "SendXferPacket", "ConfirmXferPacket", "TransferInfoPacket", "TransferPacket",
     "RequestImagePacket", "ImageDataPacket", "ImageNotInDatabasePacket",
     "AssetUploadRequestPacket", "AssetUploadCompletePacket",
     "UpdateCreateInventoryItemPacket", "UpdateInventoryItemPacket", # Added server-side packet
     "OfferFriendshipPacket", "AcceptFriendshipPacket", "DeclineFriendshipPacket",
     "OnlineNotificationPacket", "OfflineNotificationPacket", "FindAgentPacket", "AgentOnlineStatusPacket",
-    "ChangeUserRightsPacket", "TerminateFriendshipPacket"
+    "ChangeUserRightsPacket", "TerminateFriendshipPacket",
+    "ParcelPropertiesRequestPacket", "ParcelPropertiesPacket", # Added Parcel packets
+    "ParcelAccessListRequestPacket", "ParcelAccessListReplyPacket", # Added ACL packets
+    "AgentGroupDataUpdatePacket", "AgentSetGroupPacket" # Added Group packets
 ]

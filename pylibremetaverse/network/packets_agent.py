@@ -29,9 +29,51 @@ class SetAlwaysRunPacket(Packet): # Shortened
 @dataclasses.dataclass
 class AgentDataBlock: agent_id:CustomUUID=CustomUUID.ZERO;session_id:CustomUUID=CustomUUID.ZERO;first_name:bytes=b'';last_name:bytes=b'';group_powers:int=0;active_group_id:CustomUUID=CustomUUID.ZERO;group_title:bytes=b'';group_name:bytes=b'';@property def first_name_str(self)->str:return self.first_name.decode(errors='replace');@property def last_name_str(self)->str:return self.last_name.decode(errors='replace');@property def group_title_str(self)->str:return self.group_title.decode(errors='replace');@property def group_name_str(self)->str:return self.group_name.decode(errors='replace')
 class AgentDataUpdatePacket(Packet): # Shortened
-    def __init__(self,h:PacketHeader|None=None):super().__init__(PacketType.AgentDataUpdate,h);self.agent_data=AgentDataBlock()
-    def from_bytes_body(self,b,o,l):assert l>=40,"Short";self.agent_data.agent_id=CustomUUID(b,o);o+=16;def rs(bf,of,mx=32):bs=helpers.bytes_to_string(bf,of,mx).encode();return bs,len(bs)+1;self.agent_data.first_name,rl=rs(b,o);o+=rl;self.agent_data.last_name,rl=rs(b,o);o+=rl;self.agent_data.group_powers=helpers.bytes_to_uint64(b,o);o+=8;self.agent_data.active_group_id=CustomUUID(b,o);o+=16;self.agent_data.group_title,rl=rs(b,o);o+=rl;if o<l+initial_offset_of_body- (len(b) - len(self.agent_data.group_name)):self.agent_data.group_name,_=rs(b,o);return self # Fixed AgentDataUpdate parsing
-    def to_bytes(self)->bytes:return b''
+    def __init__(self,h:PacketHeader|None=None):
+        super().__init__(PacketType.AgentDataUpdate,h)
+        self.agent_data=AgentDataBlock()
+
+    def from_bytes_body(self, buffer: bytes, offset: int, length: int):
+        initial_offset = offset
+        # Minimum length: AgentID (16) + FirstName (1, null) + LastName (1, null) + GroupPowers (8) + ActiveGroupID (16) + GroupTitle (1, null) [+ GroupName (1, null)]
+        # Approx 40 + 1 = 41 without group name, 42 with group name.
+        if length < 40: # A very rough minimum, actual is more due to variable strings.
+            logger.error(f"AgentDataUpdatePacket too short for parsing. Length: {length}")
+            raise ValueError("Buffer too short for AgentDataUpdatePacket.")
+
+        self.agent_data.agent_id = CustomUUID(initial_bytes=buffer[offset : offset+16]); offset += 16
+
+        self.agent_data.first_name, bytes_read = helpers.read_null_terminated_bytes(buffer, offset)
+        offset += bytes_read
+
+        self.agent_data.last_name, bytes_read = helpers.read_null_terminated_bytes(buffer, offset)
+        offset += bytes_read
+
+        self.agent_data.group_powers = helpers.bytes_to_uint64(buffer, offset); offset += 8
+        self.agent_data.active_group_id = CustomUUID(initial_bytes=buffer[offset : offset+16]); offset += 16
+
+        self.agent_data.group_title, bytes_read = helpers.read_null_terminated_bytes(buffer, offset)
+        offset += bytes_read
+
+        # GroupName is the last field and might be absent in some older packet versions or if empty.
+        if offset < (initial_offset + length):
+            self.agent_data.group_name, bytes_read = helpers.read_null_terminated_bytes(buffer, offset)
+            offset += bytes_read
+        else:
+            self.agent_data.group_name = b""
+
+        # Sanity check: did we parse roughly what we expected?
+        if offset - initial_offset > length + 5: # Allow some slack for null terminators if not counted in string length by `length`
+            logger.warning(f"AgentDataUpdatePacket parsed beyond expected body length. Parsed: {offset-initial_offset}, Expected: {length}")
+            # This might not be an error if `length` is approximate or doesn't count all nulls.
+
+        return self
+
+    def to_bytes(self)->bytes:
+        # This packet is server-to-client, to_bytes is not typically used by client.
+        logger.warning("Client does not send AgentDataUpdatePacket.")
+        return b''
+
 @dataclasses.dataclass
 class AgentMovementCompleteDataBlock:position:Vector3=Vector3.ZERO;look_at:Vector3=Vector3.ZERO;region_handle:int=0;timestamp:int=0
 class AgentMovementCompletePacket(Packet): # Shortened

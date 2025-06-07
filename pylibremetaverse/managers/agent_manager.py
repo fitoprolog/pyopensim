@@ -133,7 +133,33 @@ class AgentManager:
     async def _handle_sim_disconnected(self,s:Simulator,r:bool):logger.info(f"Agent: Sim {s.name} disconnected. Logout:{r}");(self.client.network.current_sim==s or not self.client.network.current_sim) and await self.movement.stop_periodic_updates()
     async def move_forward(self,s:bool=True,u:bool=True):await self.movement.move_forward(s,u);async def move_backward(self,s:bool=True,u:bool=True):await self.movement.move_backward(s,u);async def move_left(self,s:bool=True,u:bool=True):await self.movement.move_left(s,u);async def move_right(self,s:bool=True,u:bool=True):await self.movement.move_right(s,u);async def turn_left(self,s:bool=True,u:bool=True):await self.movement.turn_left(s,u);async def turn_right(self,s:bool=True,u:bool=True):await self.movement.turn_right(s,u);async def jump_up(self,s:bool=True,u:bool=True):await self.movement.jump_up(s,u);async def crouch_down(self,s:bool=True,u:bool=True):await self.movement.crouch_down(s,u);async def set_fly(self,a:bool,u:bool=True):await self.movement.set_fly(a,u);async def set_mouselook(self,a:bool,u:bool=True):await self.movement.set_mouselook(a,u);async def stand(self):await self.movement.stand();async def sit_on_ground(self):await self.movement.sit_on_ground();async def set_always_run(self,a:bool,u:bool=True):await self.movement.set_always_run(a,u);async def rotate_body_by(self,a:float,u:bool=True):await self.movement.rotate_body_by(a,u);async def rotate_head_pitch_by(self,a:float,u:bool=True):await self.movement.rotate_head_pitch_by(a,u)
     def _on_agent_data_update(self,p:AgentDataUpdatePacket):
-        if p.agent_data.agent_id==self.agent_id:self.name=f"{p.agent_data.first_name_str} {p.agent_data.last_name_str}";logger.info(f"AgentDataUpdate for self: Name='{self.name}', GroupID='{p.agent_data.active_group_id}'");[h(self) for h in self._agent_data_update_handlers]
+        if p.agent_data.agent_id==self.agent_id:
+            # Update agent's own name
+            self.name=f"{p.agent_data.first_name_str} {p.agent_data.last_name_str}"
+
+            # Log the raw group data received
+            logger.info(f"AgentDataUpdate for self: Name='{self.name}', "
+                        f"ActiveGroupID='{p.agent_data.active_group_id}', "
+                        f"GroupPowers='{p.agent_data.group_powers_val}', " # Assuming raw int value from packet
+                        f"GroupName='{p.agent_data.group_name_str}', "
+                        f"GroupTitle='{p.agent_data.group_title_str}'")
+
+            # Update GroupManager with active group details
+            if hasattr(self.client, 'groups') and self.client.groups:
+                self.client.groups._update_active_group_details(
+                    group_id=p.agent_data.active_group_id,
+                    group_powers_val=p.agent_data.group_powers_val, # Pass the raw int value
+                    group_name=p.agent_data.group_name_str,
+                    group_title=p.agent_data.group_title_str
+                )
+            else:
+                logger.warning("GroupManager not available on client to update active group details.")
+
+            # Fire generic agent data update handlers
+            for h in self._agent_data_update_handlers:
+                try: h(self)
+                except Exception as e: logger.error(f"Error in _agent_data_update_handler: {e}", exc_info=True)
+
     async def _on_movement_complete(self,s:Simulator,p:AgentMovementCompletePacket):
         if p.agent_id==self.agent_id:self.current_position=p.data.position;self.current_look_at=p.data.look_at;self.movement.camera.position=p.data.position;self.movement.camera.look_at(p.data.position+p.data.look_at,p.data.position);s.agent_movement_complete=True;logger.info(f"AgentMovementComplete in {s.name}")
     async def _on_avatar_animation(self,s:Simulator,p:AvatarAnimationPacket):
@@ -281,4 +307,39 @@ class AgentManager:
         if not self.client.network.current_sim:logger.warning("No sim for mute remove");return
         await self.client.network.send_packet(RemoveMuteListEntryPacket(self.agent_id,self.session_id,id_,name),self.client.network.current_sim)
         k=f"{id_}|{name}";k in self.mute_list and self.mute_list.pop(k);[h(self.mute_list.copy())for h in self._mute_list_updated_handlers]
+
+    async def grab(self, object_local_id: int, grab_offset: Vector3 = Vector3.ZERO, surface_info=None): # surface_info placeholder
+        """Sends an ObjectGrabPacket to grab an object."""
+        if not self.client.network.current_sim:
+            logger.warning("No current sim to send ObjectGrabPacket.")
+            return
+        # Import locally if needed to avoid circular at module level, though packets_object should be fine
+        from pylibremetaverse.network.packets_object import ObjectGrabPacket
+
+        packet = ObjectGrabPacket(
+            agent_id=self.agent_id,
+            session_id=self.session_id,
+            local_id=object_local_id,
+            grab_offset=grab_offset
+            # TODO: Add surface_info if it's ever implemented
+        )
+        await self.client.network.send_packet(packet, self.client.network.current_sim)
+        logger.debug(f"Sent ObjectGrabPacket for LocalID: {object_local_id}")
+
+    async def degrab(self, object_local_id: int, surface_info=None): # surface_info placeholder
+        """Sends an ObjectDeGrabPacket to release (degrab) an object."""
+        if not self.client.network.current_sim:
+            logger.warning("No current sim to send ObjectDeGrabPacket.")
+            return
+        from pylibremetaverse.network.packets_object import ObjectDeGrabPacket
+
+        packet = ObjectDeGrabPacket(
+            agent_id=self.agent_id,
+            session_id=self.session_id,
+            local_id=object_local_id
+            # TODO: Add surface_info if implemented
+        )
+        await self.client.network.send_packet(packet, self.client.network.current_sim)
+        logger.debug(f"Sent ObjectDeGrabPacket for LocalID: {object_local_id}")
+
     def __str__(self): return f"Agent(Name='{self.name}', ID='{self.agent_id}')"

@@ -28,6 +28,8 @@ class PacketType(enum.Enum):
     ObjectName = 34; ObjectDescription = 35; ObjectText = 36; ObjectClickAction = 37
     ObjectAdd = 38
     ObjectAdd = 38
+    ObjectGrab = 26                # Low Freq (0xFFFFFF1A) Client -> Server
+    ObjectDeGrab = 27              # Low Freq (0xFFFFFF1B) Client -> Server
     AssetUploadRequest = 39
     AssetUploadComplete = 40
     UpdateCreateInventoryItem = 41 # Client -> Server
@@ -44,6 +46,20 @@ class PacketType(enum.Enum):
     ChangeUserRights = 118     # Low Freq (0xFFFFFF76) - Client to Server
     TerminateFriendship = 119  # Low Freq (0xFFFFFF77) - Client to Server
 
+    # Parcel Packets
+    ParcelPropertiesRequest = 92 # Low Freq (0xFFFFFF5C) - Client to Server
+    ParcelProperties = 77        # Low Freq (0xFFFFFF4D) - Server to Client
+    ParcelAccessListRequest = 86 # Low Freq (0xFFFFFF56) - Client to Server
+    ParcelAccessListReply = 87   # Low Freq (0xFFFFFF57) - Server to Client (matches C# ParcelAccessList)
+    # ParcelDwellRequest = 88    # Low Freq (0xFFFFFF58)
+    # ParcelDwell = 89           # Low Freq (0xFFFFFF59)
+    # ParcelInfoRequest = 98     # Low Freq (0xFFFFFF62)
+    # ParcelInfoReply = 99       # Low Freq (0xFFFFFF63)
+    # Other parcel packets...
+
+    # Group Packets
+    AgentGroupDataUpdate = 52    # Low Freq (0xFFFFFF34) - Server to Client
+    AgentSetGroup = 109          # Low Freq (0xFFFFFF6D) - Client to Server
 
     # Image/Texture Packets (UDP)
     RequestImage = 19

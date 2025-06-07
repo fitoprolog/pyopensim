@@ -25,7 +25,14 @@ from .default_textures import ( # Added default textures
     DEFAULT_SKIN_TEXTURE, DEFAULT_EYES_TEXTURE, DEFAULT_HAIR_TEXTURE,
     DEFAULT_SHIRT_TEXTURE, DEFAULT_PANTS_TEXTURE
 )
-from .friends_defs import FriendRights, FriendInfo, BuddyListEntry # Added Friends defs
+from .friends_defs import FriendRights, FriendInfo, BuddyListEntry
+from .parcel_defs import ( # Added Parcel defs
+    ParcelFlags, ParcelCategory, ParcelStatus, ParcelDwell, ParcelInfo,
+    ParcelACLFlags, ParcelAccessEntry # Added ACL defs
+)
+from .group_defs import ( # Added Group defs
+    GroupPowers, GroupNoticeInfo, GroupRole, GroupMember, Group
+)
 
 
 __all__ = [
@@ -46,5 +53,8 @@ __all__ = [
     "InventoryBase", "InventoryFolder", "InventoryItem",
     "DEFAULT_SKIN_TEXTURE", "DEFAULT_EYES_TEXTURE", "DEFAULT_HAIR_TEXTURE",
     "DEFAULT_SHIRT_TEXTURE", "DEFAULT_PANTS_TEXTURE",
-    "FriendRights", "FriendInfo", "BuddyListEntry" # Added Friends defs
+    "FriendRights", "FriendInfo", "BuddyListEntry",
+    "ParcelFlags", "ParcelCategory", "ParcelStatus", "ParcelDwell", "ParcelInfo", # Added Parcel defs
+    "ParcelACLFlags", "ParcelAccessEntry", # Added ACL defs
+    "GroupPowers", "GroupNoticeInfo", "GroupRole", "GroupMember", "Group" # Added Group defs
 ]

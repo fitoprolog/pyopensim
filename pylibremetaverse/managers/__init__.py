@@ -37,11 +37,11 @@ __all__ = [
     "DirectoryManager",
     "TerrainManager",
     "SoundManager",
-    "AgentThrottle",
-    "AgentCamera",
-    "AgentMovementManager",
-    "AppearanceManager",
-    "ObjectManager",
-    "InventoryManager",
-    "AssetManager", # Added
+    "AgentThrottle"
+    # "AgentCamera", # Assuming this is part of AgentManager or similar, or not a top-level manager
+    # "AgentMovementManager", # Typically part of AgentManager
+    # "AppearanceManager", # Already listed
+    # "ObjectManager", # Already listed
+    # "InventoryManager", # Already listed
+    # "AssetManager", # Already listed
 ]

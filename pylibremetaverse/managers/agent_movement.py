@@ -93,9 +93,26 @@ class AgentMovementManager:
             controls_to_set = ControlFlags(controls_to_set)
 
         if active:
-            self.agent_controls |= controls_to_set
+            actual_flags_to_set = controls_to_set
+            if self.always_run:
+                if controls_to_set & ControlFlags.AGENT_CONTROL_AT_POS or \
+                   controls_to_set & ControlFlags.AGENT_CONTROL_AT_NEG or \
+                   controls_to_set & ControlFlags.AGENT_CONTROL_LEFT_POS or \
+                   controls_to_set & ControlFlags.AGENT_CONTROL_LEFT_NEG:
+                    actual_flags_to_set |= ControlFlags.AGENT_CONTROL_FAST_AT
+            self.agent_controls |= actual_flags_to_set
         else:
+            # When deactivating, clear the base control and also FAST_AT if it was tied to this control.
+            # This is a bit simplified; if multiple controls use FAST_AT, clearing it here might be premature
+            # if another FAST_AT-compatible control is still active.
+            # However, individual move methods handle adding FAST_AT, so direct set_controls
+            # for deactivation should primarily focus on the passed flags.
+            # A more robust solution might involve tracking which specific control activated FAST_AT.
+            # For now, if FAST_AT is on and a movement key is released, we might clear FAST_AT too.
             self.agent_controls &= ~controls_to_set
+            if controls_to_set & (ControlFlags.AGENT_CONTROL_AT_POS | ControlFlags.AGENT_CONTROL_AT_NEG | \
+                                 ControlFlags.AGENT_CONTROL_LEFT_POS | ControlFlags.AGENT_CONTROL_LEFT_NEG):
+                self.agent_controls &= ~ControlFlags.AGENT_CONTROL_FAST_AT
 
         if send_update_now:
             await self.send_update()

@@ -24,6 +24,8 @@ from .packets_asset import (
 from .packets_friends import ( # Added for new friend status packets
     OnlineNotificationPacket, OfflineNotificationPacket, AgentOnlineStatusPacket
 )
+from .packets_parcel import ParcelPropertiesPacket, ParcelAccessListReplyPacket # Added ACL reply
+from .packets_group import AgentGroupDataUpdatePacket # Added Group packet
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,9 @@ def from_bytes(payload_with_type_markers: bytes, header: PacketHeader) -> Packet
         elif type_byte == 0x26: # ConfirmXferPacket can be sent by server to confirm upload chunk
             from pylibremetaverse.network.packets_asset import ConfirmXferPacket as ServerConfirmXferPacket
             packet_class=ServerConfirmXferPacket; packet_enum_type_for_logging=PacketType.ConfirmXferPacket
+        elif type_byte == 0x4D: packet_class=ParcelPropertiesPacket; packet_enum_type_for_logging=PacketType.ParcelProperties
+        elif type_byte == 0x57: packet_class=ParcelAccessListReplyPacket; packet_enum_type_for_logging=PacketType.ParcelAccessListReply
+        elif type_byte == 0x34: packet_class=AgentGroupDataUpdatePacket; packet_enum_type_for_logging=PacketType.AgentGroupDataUpdate # ID 52 (0x34)
         else: logger.debug(f"Unknown Low Freq packet type: 0xFFFFFF{type_byte:02X}. Seq={header.sequence}")
         if packet_class: body_payload = payload_with_type_markers[4:]
 

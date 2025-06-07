@@ -973,3 +973,70 @@ class ObjectClickActionPacket(Packet):
     def from_bytes_body(self, buffer: bytes, offset: int, length: int):
         logger.warning("Client doesn't receive ObjectClickActionPacket.")
         return self
+
+# --- ObjectGrabPacket (Client -> Server) ---
+@dataclasses.dataclass
+class ObjectGrabObjectDataBlock:
+    LocalID: int # u32
+    GrabOffset: Vector3 = dataclasses.field(default_factory=Vector3.ZERO)
+    # Potentially GrabPosition, SurfaceInfoBlock etc. if more detail needed
+    # For a simple touch, LocalID and a zero offset might suffice.
+
+class ObjectGrabPacket(Packet):
+    def __init__(self, agent_id: CustomUUID, session_id: CustomUUID,
+                 local_id: int, grab_offset: Vector3 = Vector3.ZERO,
+                 header: PacketHeader | None = None):
+        super().__init__(PacketType.ObjectGrab, header if header else PacketHeader())
+        self.agent_data = ObjectManipulationAgentDataBlock(AgentID=agent_id, SessionID=session_id) # Reusing common block
+        self.object_data = ObjectGrabObjectDataBlock(LocalID=local_id, GrabOffset=grab_offset)
+        # For a full implementation, one or more SurfaceInfo blocks might be here.
+        # SurfaceInfo { FaceIndex (s32), Position (Vector3), Normal (Vector3), Binormal (Vector3), TexCoord (Vector2), Stride (s32), VertexIndex (s32) }
+        # For now, simplifying to not include SurfaceInfo array.
+        self.header.reliable = True
+
+    def to_bytes(self) -> bytes:
+        data = bytearray()
+        # AgentData
+        data.extend(self.agent_data.AgentID.get_bytes())
+        data.extend(self.agent_data.SessionID.get_bytes())
+        # ObjectData
+        data.extend(helpers.uint32_to_bytes(self.object_data.LocalID))
+        data.extend(struct.pack('<fff', self.object_data.GrabOffset.X, self.object_data.GrabOffset.Y, self.object_data.GrabOffset.Z))
+        # SurfaceInfo array would follow (count byte + blocks)
+        data.append(0) # Assuming 0 SurfaceInfo blocks for simple touch
+        return bytes(data)
+
+    def from_bytes_body(self, buffer: bytes, offset: int, length: int):
+        logger.warning("Client doesn't receive ObjectGrabPacket.")
+        return self
+
+# --- ObjectDeGrabPacket (Client -> Server) ---
+@dataclasses.dataclass
+class ObjectDeGrabObjectDataBlock:
+    LocalID: int # u32
+    # Potentially SurfaceInfoBlock if degrab needs to specify where it was released on surface.
+
+class ObjectDeGrabPacket(Packet):
+    def __init__(self, agent_id: CustomUUID, session_id: CustomUUID,
+                 local_id: int,
+                 header: PacketHeader | None = None):
+        super().__init__(PacketType.ObjectDeGrab, header if header else PacketHeader())
+        self.agent_data = ObjectManipulationAgentDataBlock(AgentID=agent_id, SessionID=session_id)
+        self.object_data = ObjectDeGrabObjectDataBlock(LocalID=local_id)
+        # SurfaceInfo array might follow here too.
+        self.header.reliable = True
+
+    def to_bytes(self) -> bytes:
+        data = bytearray()
+        # AgentData
+        data.extend(self.agent_data.AgentID.get_bytes())
+        data.extend(self.agent_data.SessionID.get_bytes())
+        # ObjectData
+        data.extend(helpers.uint32_to_bytes(self.object_data.LocalID))
+        # SurfaceInfo array would follow (count byte + blocks)
+        data.append(0) # Assuming 0 SurfaceInfo blocks for simple touch
+        return bytes(data)
+
+    def from_bytes_body(self, buffer: bytes, offset: int, length: int):
+        logger.warning("Client doesn't receive ObjectDeGrabPacket.")
+        return self
