@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>LibreMetaverse.PacketDump</PackageId>
+    <OutputType>Exe</OutputType>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <OutputPath>..\..\..\bin\</OutputPath>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>LMV.PacketDump</ToolCommandName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Net.NameResolution" Version="4.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\LibreMetaverse\LibreMetaverse.csproj" />
+    <ProjectReference Include="..\..\..\LibreMetaverse.Types\LibreMetaverse.Types.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\LICENSE.txt" Pack="true" PackagePath="\" />
+    <None Include="..\..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\..\data\logo.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
