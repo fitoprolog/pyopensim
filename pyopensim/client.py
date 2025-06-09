@@ -4,10 +4,24 @@ from typing import Optional
 import threading
 import time
 
-try:
-    import requests
-except ImportError:  # pragma: no cover - optional dependency
-    requests = None
+try:  # pragma: no cover - optional dependency
+    import requests as _requests
+except ImportError:  # pragma: no cover - missing dependency
+    _requests = None
+
+if _requests is None:
+    class _RequestsPlaceholder:
+        """Fallback object so tests can monkeypatch ``requests`` methods."""
+
+        def post(self, *_, **__):
+            raise ImportError("requests is required for HTTP operations")
+
+        def get(self, *_, **__):
+            raise ImportError("requests is required for HTTP operations")
+
+    requests = _RequestsPlaceholder()
+else:
+    requests = _requests
 
 from .scene import Scene
 
