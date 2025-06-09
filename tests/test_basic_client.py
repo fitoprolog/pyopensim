@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import pylibremetaverse.basic as basic
 import pytest
+import xmlrpc.client
 
 class FakeResponse:
     def __init__(self, data):
@@ -15,14 +16,21 @@ class FakeResponse:
     def raise_for_status(self):
         pass
     def json(self):
+        if isinstance(self.data, bytes):
+            raise ValueError("binary")
         return self.data
+    @property
+    def content(self):
+        if isinstance(self.data, bytes):
+            return self.data
+        return str(self.data).encode()
 
 class FakeClient:
     def __init__(self, responses):
         self.responses = responses
         self.calls = []
-    async def post(self, url, data=None, json=None):
-        self.calls.append(("post", url, data, json))
+    async def post(self, url, data=None, json=None, content=None, headers=None):
+        self.calls.append(("post", url, data, json, content, headers))
         return FakeResponse(self.responses.pop(0))
     async def get(self, url):
         self.calls.append(("get", url))
@@ -32,12 +40,13 @@ class FakeClient:
 
 def test_login_and_event_loop(monkeypatch):
     async def run_test():
-        login_data = {
+        login_dict = {
             "session_id": "sess",
             "agent_id": "agent",
             "seed_capability": "http://seed",
             "event_queue": "http://events",
         }
+        login_data = xmlrpc.client.dumps((login_dict,), methodresponse=True)
         event_data = {"events": [{"event": "ObjectUpdate", "id": 1, "position": [1,2,3]}]}
         fake_http = FakeClient([login_data, event_data])
         monkeypatch.setattr(basic, "httpx", SimpleNamespace(AsyncClient=lambda timeout: fake_http))

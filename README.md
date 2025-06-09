@@ -155,9 +155,9 @@ if __name__ == "__main__":
 ### Simple Client Example
 
 The repository also ships with a very small demonstration client in the
-`pysimpleclient` package.  It implements login and a basic event loop so
-you can quickly test connectivity to a grid without using the full
-`GridClient` stack.
+`pysimpleclient` package.  It implements login using the XML&#8209;RPC
+protocol and a basic event loop so you can quickly test connectivity to a
+grid without using the full `GridClient` stack.
 
 ```python
 import asyncio

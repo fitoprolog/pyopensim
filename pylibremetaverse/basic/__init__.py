@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import asyncio
 from contextlib import suppress
 from typing import Any, Optional, Dict
+import xmlrpc.client
 
 try:
     import httpx
@@ -43,7 +44,7 @@ class BasicClient:
         self.scene: Dict[str, Any] = {}
 
     async def login(self, first: str, last: str, password: str) -> bool:
-        """Perform LLSD login and start event processing."""
+        """Perform XML-RPC login and start event processing."""
         payload = {
             "first": first,
             "last": last,
@@ -52,10 +53,15 @@ class BasicClient:
             "channel": "PyLibreMetaverse",
             "version": "0.1",
         }
+        xml = xmlrpc.client.dumps((payload,), methodname="login_to_simulator")
+        headers = {"Content-Type": "text/xml"}
         try:
-            resp = await self.http.post(self.login_uri, data=payload)
+            resp = await self.http.post(self.login_uri, content=xml, headers=headers)
             resp.raise_for_status()
-            data = resp.json()
+            try:
+                data = xmlrpc.client.loads(resp.content)[0][0]
+            except Exception:
+                data = resp.json()
             self.login_data = LoginResponse(
                 session_id=data.get("session_id", ""),
                 agent_id=data.get("agent_id", ""),
