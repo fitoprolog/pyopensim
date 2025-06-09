@@ -152,6 +152,42 @@ if __name__ == "__main__":
 ```
 **Note:** The snippet above is conceptual. Refer to `examples/python_test_client.py` for a runnable and more feature-complete example.
 
+### Simple Client Example
+
+The repository also ships with a very small demonstration client in the
+`pysimpleclient` package.  It implements login using the XML&#8209;RPC
+protocol and a basic event loop so you can quickly test connectivity to a
+grid without using the full `GridClient` stack.
+
+```python
+import asyncio
+from pysimpleclient import SimpleClient
+
+async def main():
+    client = SimpleClient("http://YOUR_LOGIN_URI")
+    if await client.login("First", "Last", "password"):
+        print("Logged in; avatars:", client.avatar.avatars)
+        await asyncio.sleep(10)
+        await client.disconnect()
+    else:
+        print("Login failed")
+
+asyncio.run(main())
+```
+
+### Curses Interface
+
+For a lightweight text UI you can run the small curses client included in
+``pyopensim``. It uses the same XML‑RPC login method as the minimal client,
+displays packet events and nearby objects, and lets you move around with the
+keyboard.
+
+```python
+from pyopensim import run_curses_client
+
+run_curses_client("http://LOGIN_URI", "First", "Last", "password")
+```
+
 ## Current Limitations
 
 *   **Experimental Software:** The library is still under active development and may have bugs or incomplete features. APIs might change.
