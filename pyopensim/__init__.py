@@ -3,3 +3,4 @@
 from .client import OpenSimClient
 from .render import Renderer
 from .scene import Scene
+from .curses_client import run_curses_client
