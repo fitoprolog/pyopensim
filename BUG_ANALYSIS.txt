@@ -1,0 +1,54 @@
+This document summarizes notable issues found in the current `pylibremetaverse` codebase.
+
+General observations
+--------------------
+* Many manager classes are present only as stubs with `pass` bodies. Examples include
+  `InventoryAISClient`, `GridManager`, `DirectoryManager`, `EstateTools`, `TerrainManager`,
+  `AvatarManager`, `SoundManager`, and `AgentThrottle`.
+* The HTTP capabilities client (`network/http_caps_client.py`) does not implement any
+  real functionality beyond placeholders.
+* Several utilities (e.g. zero‐coding in `utils/helpers.py`, bit packing helpers)
+  contain TODO comments and are only partially implemented.
+* The login response class (`network/login_defs.LoginResponseData`) lacks XML‑RPC
+  parsing support (`parse_xmlrpc` is a stub).
+* Tests do not currently pass (`test_login_parses_response` fails due to missing
+  `requests` attribute), indicating incomplete test coverage.
+
+Syntax errors detected by Pyflakes
+----------------------------------
+Running `pyflakes pylibremetaverse` surfaces numerous syntax errors which prevent
+execution of the code. Selected examples include:
+* `types/primitive.py`: missing indented block after `if` at line 261.
+* `types/custom_uuid.py`: invalid syntax around commented C# members.
+* `network/packets_agent.py`: malformed class definition causing invalid syntax.
+* `assets/asset_wearable.py`: unmatched parenthesis at line 100.
+* `managers/inventory_manager.py`: invalid syntax near line 667.
+* `managers/agent_manager.py`: long one‑line method definitions leading to
+  syntax errors at line 134.
+* `managers/object_manager.py`: invalid syntax around a `for` loop at line 90.
+* `managers/asset_manager.py`: unterminated string literal at line 478.
+* `network/packets_teleport.py`: several undefined names referencing `dataclasses`.
+
+Unused imports and variables are also widespread throughout the package.
+See `/tmp/pyflakes.log` for the full output (~100 lines) containing additional
+warnings.
+
+Missing implementations
+-----------------------
+* Various network packet types are only partially defined or refer to undefined
+  classes. For instance, teleport and appearance packet handling references
+  `Vector3` and `List` which are not imported.
+* Parsing of zero‑coded packets is only partially implemented in
+  `utils/helpers.py` and lacks proper compression/decompression logic.
+* Some packet handlers (e.g. in `object_manager`, `agent_movement`) appear
+  incomplete or have placeholder logic.
+* The C# port left comments and sections that reference features not yet
+  translated to Python (e.g. TODOs in `appearance_manager` for texture handling).
+
+Overall, the library requires extensive cleanup:
+* Resolve syntax errors preventing module import.
+* Remove or implement placeholder `pass` sections for the various manager
+  classes.
+* Complete packet parsing logic and correct undefined references.
+* Finish utility functions (zero‑coding, bit packing) and implement missing
+  login parsing features.
