@@ -1,13 +1,28 @@
 """Client for connecting to OpenSimulator/SecondLife grids."""
 
 from typing import Optional
+import hashlib
 import threading
 import time
 
-try:
-    import requests
-except ImportError:  # pragma: no cover - optional dependency
-    requests = None
+try:  # pragma: no cover - optional dependency
+    import requests as _requests
+except ImportError:  # pragma: no cover - missing dependency
+    _requests = None
+
+if _requests is None:
+    class _RequestsPlaceholder:
+        """Fallback object so tests can monkeypatch ``requests`` methods."""
+
+        def post(self, *_, **__):
+            raise ImportError("requests is required for HTTP operations")
+
+        def get(self, *_, **__):
+            raise ImportError("requests is required for HTTP operations")
+
+    requests = _RequestsPlaceholder()
+else:
+    requests = _requests
 
 from .scene import Scene
 
@@ -25,6 +40,7 @@ class OpenSimClient:
         self.event_queue_cap: Optional[str] = None
         self.movement_cap: Optional[str] = None
         self.scene = Scene()
+        self.event_log: list[dict] = []
         self._event_thread: Optional[threading.Thread] = None
         self._running = False
 
@@ -38,18 +54,29 @@ class OpenSimClient:
         if requests is None:
             raise ImportError("requests is required for login functionality")
 
+        if self.password.startswith("$1$") and len(self.password) == 35:
+            passwd = self.password
+        else:
+            passwd = "$1$" + hashlib.md5(self.password.encode("utf-8")).hexdigest()
+
         payload = {
             "first": self.first,
             "last": self.last,
-            "passwd": self.password,
+            "passwd": passwd,
             "start": "last",
             "channel": "PyOpenSim",
             "version": "0.0.1",
         }
         try:
-            resp = requests.post(self.login_uri, data=payload, timeout=10)
+            import xmlrpc.client
+            xml = xmlrpc.client.dumps((payload,), methodname="login_to_simulator")
+            headers = {"Content-Type": "text/xml"}
+            resp = requests.post(self.login_uri, data=xml, headers=headers, timeout=10)
             resp.raise_for_status()
-            data = resp.json()
+            try:
+                data = xmlrpc.client.loads(resp.content)[0][0]
+            except Exception:
+                data = resp.json()
             self.session_info = data
             self.session_id = data.get("session_id")
             self.agent_id = data.get("agent_id")
@@ -62,7 +89,10 @@ class OpenSimClient:
                 self._event_thread.start()
             return True
         except Exception as exc:  # pragma: no cover - network errors
-            print(f"Login failed: {exc}")
+            msg = str(exc)
+            if hasattr(exc, 'response') and exc.response is not None:
+                msg += f" - response: {exc.response.text.strip()}"
+            print(f"Login failed: {msg}")
             return False
 
     def disconnect(self):
@@ -101,3 +131,6 @@ class OpenSimClient:
             pos = tuple(event.get("position", (0, 0, 0)))
             rot = tuple(event.get("rotation", (0, 0, 0)))
             self.scene.update_object(str(obj_id), pos, rot)
+        self.event_log.append(event)
+        if len(self.event_log) > 100:
+            self.event_log.pop(0)

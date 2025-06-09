@@ -41,18 +41,18 @@ class CustomUUID:
         # uuid.bytes_le is almost what we need, but UUID.cs does a specific shuffle.
         # The standard .bytes attribute is big-endian.
         # UUID.cs:
-        // private byte _a; (int)
-        // private byte _b; (short)
-        // private byte _c; (short)
-        // private byte _d;
-        // private byte _e;
-        // private byte _f;
-        // private byte _g;
-        // private byte _h;
-        // private byte _i;
-        // private byte _j;
-        // private byte _k;
-        // network byte order (big-endian) for the first 3 components
+        # private byte _a; (int)
+        # private byte _b; (short)
+        # private byte _c; (short)
+        # private byte _d;
+        # private byte _e;
+        # private byte _f;
+        # private byte _g;
+        # private byte _h;
+        # private byte _i;
+        # private byte _j;
+        # private byte _k;
+        # network byte order (big-endian) for the first 3 components
         # then the rest are just bytes
 
         # Python's uuid.UUID fields:
